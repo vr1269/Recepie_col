@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recipe Collection</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.5.0/axios.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .star-rating {
+            color: #fbbf24;
+        }
+        .drawer {
+            width: 500px;
+            max-width: 90vw;
+        }
+        .drawer-overlay {
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        .table-container {
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+        .truncate-cell {
+            max-width: 200px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .filter-input {
+            min-width: 120px;
+        }
+        .loading-spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback } = React;
+
+        // Star Rating Component
+        const StarRating = ({ rating }) => {
+            if (!rating) return <span className="text-gray-400">No rating</span>;
+            
+            const stars = [];
+            const fullStars = Math.floor(rating);
+            const hasHalfStar = rating % 1 !== 0;
+            
+            for (let i = 0; i < fullStars; i++) {
+                stars.push(<i key={i} className="fas fa-star star-rating"></i>);
+            }
+            
+            if (hasHalfStar) {
+                stars.push(<i key="half" className="fas fa-star-half-alt star-rating"></i>);
+            }
+            
+            const emptyStars = 5 - Math.ceil(rating);
+            for (let i = 0; i < emptyStars; i++) {
+                stars.push(<i key={`empty-${i}`} className="far fa-star text-gray-300"></i>);
+            }
+            
+            return (
+                <div className="flex items-center space-x-1">
+                    <div className="flex">{stars}</div>
+                    <span className="text-sm text-gray-600">({rating.toFixed(1)})</span>
+                </div>
+            );
+        };
+
+        // Recipe Drawer Component
+        const RecipeDrawer = ({ recipe, isOpen, onClose }) => {
+            const [isExpanded, setIsExpanded] = useState(false);
+
+            if (!isOpen || !recipe) return null;
+
+            const formatTime = (minutes) => {
+                if (!minutes) return 'Not specified';
+                if (minutes < 60) return `${minutes} min`;
+                const hours = Math.floor(minutes / 60);
+                const remainingMinutes = minutes % 60;
+                return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+            };
+
+            const parseNutrientValue = (value) => {
+                if (!value) return 'N/A';
+                if (typeof value === 'string') {
+                    return value.replace(/[^\d.-]/g, '') + (value.includes('kcal') ? ' kcal' : 
+                           value.includes('mg') ? ' mg' : value.includes('g') ? ' g' : '');
+                }
+                return value;
+            };
+
+            return (
+                <div className="fixed inset-0 z-50 overflow-hidden">
+                    <div className="drawer-overlay absolute inset-0" onClick={onClose}></div>
+                    <div className="absolute right-0 top-0 h-full drawer bg-white shadow-xl">
+                        <div className="flex flex-col h-full">
+                            {/* Header */}
+                            <div className="flex items-center justify-between p-6 border-b">
+                                <div className="flex-1">
+                                    <h2 className="text-xl font-bold text-gray-900 mb-1">{recipe.title}</h2>
+                                    <p className="text-gray-600">{recipe.cuisine}</p>
+                                </div>
+                                <button
+                                    onClick={onClose}
+                                    className="ml-4 text-gray-400 hover:text-gray-600 transition-colors"
+                                >
+                                    <i className="fas fa-times text-xl"></i>
+                                </button>
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                                {/* Description */}
+                                {recipe.description && (
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-gray-700 mb-2">Description:</h3>
+                                        <p className="text-gray-600 leading-relaxed">{recipe.description}</p>
+                                    </div>
+                                )}
+
+                                {/* Time Information */}
+                                <div>
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h3 className="text-sm font-semibold text-gray-700 mb-2">Total Time:</h3>
+                                            <p className="text-gray-600">{formatTime(recipe.total_time)}</p>
+                                        </div>
+                                        <button
+                                            onClick={() => setIsExpanded(!isExpanded)}
+                                            className="text-blue-600 hover:text-blue-700 transition-colors"
+                                        >
+                                            <i className={`fas fa-chevron-${isExpanded ? 'up' : 'down'}`}></i>
+                                        </button>
+                                    </div>
+                                    
+                                    {isExpanded && (
+                                        <div className="mt-3 pl-4 border-l-2 border-gray-200 space-y-2">
+                                            <div className="flex justify-between">
+                                                <span className="text-sm text-gray-600">Prep Time:</span>
+                                                <span className="text-sm text-gray-800">{formatTime(recipe.prep_time)}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-sm text-gray-600">Cook Time:</span>
+                                                <span className="text-sm text-gray-800">{formatTime(recipe.cook_time)}</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Serving Information */}
+                                {recipe.serves && (
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-gray-700 mb-2">Serves:</h3>
+                                        <p className="text-gray-600">{recipe.serves}</p>
+                                    </div>
+                                )}
+
+                                {/* Rating */}
+                                {recipe.rating && (
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-gray-700 mb-2">Rating:</h3>
+                                        <StarRating rating={recipe.rating} />
+                                    </div>
+                                )}
+
+                                {/* Nutrition Information */}
+                                {recipe.nutrients && (
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-3">Nutrition Information</h3>
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full divide-y divide-gray-200">
+                                                <tbody className="bg-white divide-y divide-gray-200">
+                                                    {Object.entries(recipe.nutrients).map(([key, value]) => (
+                                                        <tr key={key} className="hover:bg-gray-50">
+                                                            <td className="px-3 py-2 text-sm font-medium text-gray-700 capitalize">
+                                                                {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                                                            </td>
+                                                            <td className="px-3 py-2 text-sm text-gray-600">
+                                                                {parseNutrientValue(value)}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Filter Component
+        const FilterRow = ({ filters, setFilters, onSearch, isLoading }) => {
+            const handleFilterChange = (field, value) => {
+                const newFilters = { ...filters, [field]: value };
+                setFilters(newFilters);
+            };
+
+            const handleSearch = () => {
+                onSearch(filters);
+            };
+
+            const clearFilters = () => {
+                const clearedFilters = {
+                    title: '',
+                    cuisine: '',
+                    rating: '',
+                    total_time: '',
+                    calories: ''
+                };
+                setFilters(clearedFilters);
+                onSearch(clearedFilters);
+            };
+
+            return (
+                <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Title</label>
+                            <input
+                                type="text"
+                                placeholder="Search title..."
+                                value={filters.title}
+                                onChange={(e) => handleFilterChange('title', e.target.value)}
+                                className="filter-input w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Cuisine</label>
+                            <input
+                                type="text"
+                                placeholder="e.g. Southern"
+                                value={filters.cuisine}
+                                onChange={(e) => handleFilterChange('cuisine', e.target.value)}
+                                className="filter-input w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Rating</label>
+                            <input
+                                type="text"
+                                placeholder=">=4.5, <=3.0"
+                                value={filters.rating}
+                                onChange={(e) => handleFilterChange('rating', e.target.value)}
+                                className="filter-input w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Total Time</label>
+                            <input
+                                type="text"
+                                placeholder="<=120, >=30"
+                                value={filters.total_time}
+                                onChange={(e) => handleFilterChange('total_time', e.target.value)}
+                                className="filter-input w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Calories</label>
+                            <input
+                                type="text"
+                                placeholder="<=400, >=200"
+                                value={filters.calories}
+                                onChange={(e) => handleFilterChange('calories', e.target.value)}
+                                className="filter-input w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex space-x-2">
+                        <button
+                            onClick={handleSearch}
+                            disabled={isLoading}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                        >
+                            {isLoading ? (
+                                <div className="loading-spinner"></div>
+                            ) : (
+                                <i className="fas fa-search"></i>
+                            )}
+                            <span>Search</span>
+                        </button>
+                        <button
+                            onClick={clearFilters}
+                            className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                        >
+                            <i className="fas fa-times"></i>
+                            <span className="ml-1">Clear</span>
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        // Pagination Component
+        const Pagination = ({ currentPage, totalPages, totalItems, itemsPerPage, onPageChange, onItemsPerPageChange }) => {
+            const getPageNumbers = () => {
+                const delta = 2;
+                const range = [];
+                const rangeWithDots = [];
+
+                for (let i = Math.max(2, currentPage - delta); i <= Math.min(totalPages - 1, currentPage + delta); i++) {
+                    range.push(i);
+                }
+
+                if (currentPage - delta > 2) {
+                    rangeWithDots.push(1, '...');
+                } else {
+                    rangeWithDots.push(1);
+                }
+
+                rangeWithDots.push(...range);
+
+                if (currentPage + delta < totalPages - 1) {
+                    rangeWithDots.push('...', totalPages);
+                } else if (totalPages > 1) {
+                    rangeWithDots.push(totalPages);
+                }
+
+                return rangeWithDots;
+            };
+
+            const startItem = (currentPage - 1) * itemsPerPage + 1;
+            const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+
+            return (
+                <div className="flex flex-col sm:flex-row justify-between items-center space-y-3 sm:space-y-0 bg-white px-6 py-3 border-t border-gray-200">
+                    <div className="flex items-center space-x-2">
+                        <span className="text-sm text-gray-700">Show</span>
+                        <select
+                            value={itemsPerPage}
+                            onChange={(e) => onItemsPerPageChange(parseInt(e.target.value))}
+                            className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            <option value={15}>15</option>
+                            <option value={25}>25</option>
+                            <option value={35}>35</option>
+                            <option value={50}>50</option>
+                        </select>
+                        <span className="text-sm text-gray-700">per page</span>
+                    </div>
+
+                    <div className="text-sm text-gray-700">
+                        Showing {startItem} to {endItem} of {totalItems} results
+                    </div>
+
+                    <div className="flex items-center space-x-1">
+                        <button
+                            onClick={() => onPageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-l-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <i className="fas fa-chevron-left"></i>
+                        </button>
+
+                        {getPageNumbers().map((page, index) => (
+                            page === '...' ? (
+                                <span key={index} className="px-3 py-2 text-sm font-medium text-gray-700">...</span>
+                            ) : (
+                                <button
+                                    key={index}
+                                    onClick={() => onPageChange(page)}
+                                    className={`px-3 py-2 text-sm font-medium border ${
+                                        currentPage === page
+                                            ? 'bg-blue-600 text-white border-blue-600'
+                                            : 'text-gray-500 bg-white border-gray-300 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    {page}
+                                </button>
+                            )
+                        ))}
+
+                        <button
+                            onClick={() => onPageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-r-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <i className="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        // No Results Component
+        const NoResults = ({ type = 'search' }) => {
+            return (
+                <div className="text-center py-12">
+                    <div className="mx-auto max-w-md">
+                        <i className={`fas ${type === 'search' ? 'fa-search' : 'fa-utensils'} text-6xl text-gray-300 mb-4`}></i>
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">
+                            {type === 'search' ? 'No results found' : 'No recipes available'}
+                        </h3>
+                        <p className="text-gray-500">
+                            {type === 'search' 
+                                ? 'Try adjusting your search criteria or clear the filters to see more results.'
+                                : 'There are no recipes in the database yet. Please check back later.'
+                            }
+                        </p>
+                    </div>
+                </div>
+            );
+        };
+
+        // Main Recipe Table Component
+        const RecipeTable = () => {
+            const [recipes, setRecipes] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+            const [selectedRecipe, setSelectedRecipe] = useState(null);
+            const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+            
+            // Pagination state
+            const [currentPage, setCurrentPage] = useState(1);
+            const [itemsPerPage, setItemsPerPage] = useState(15);
+            const [totalItems, setTotalItems] = useState(0);
+            
+            // Filter state
+            const [filters, setFilters] = useState({
+                title: '',
+                cuisine: '',
+                rating: '',
+                total_time: '',
+                calories: ''
+            });
+            const [isFiltered, setIsFiltered] = useState(false);
+
+            const API_BASE_URL = 'http://localhost:3001';
+
+            // Fetch recipes function
+            const fetchRecipes = useCallback(async (page = 1, limit = itemsPerPage, searchFilters = null) => {
+                setLoading(true);
+                setError(null);
+                
+                try {
+                    let url;
+                    const params = new URLSearchParams({
+                        page: page.toString(),
+                        limit: limit.toString()
+                    });
+
+                    if (searchFilters && Object.values(searchFilters).some(value => value.trim() !== '')) {
+                        url = `${API_BASE_URL}/api/recipes/search`;
+                        Object.entries(searchFilters).forEach(([key, value]) => {
+                            if (value.trim() !== '') {
+                                params.append(key, value);
+                            }
+                        });
+                        setIsFiltered(true);
+                    } else {
+                        url = `${API_BASE_URL}/api/recipes`;
+                        setIsFiltered(false);
+                    }
+
+                    const response = await axios.get(`${url}?${params}`);
+                    
+                    if (response.data && response.data.data) {
+                        setRecipes(response.data.data);
+                        setTotalItems(response.data.total || 0);
+                    } else {
+                        setRecipes([]);
+                        setTotalItems(0);
+                    }
+                } catch (err) {
+                    console.error('Error fetching recipes:', err);
+                    setError('Failed to fetch recipes. Please make sure the server is running on port 3001.');
+                    setRecipes([]);
+                    setTotalItems(0);
+                }
+                
+                setLoading(false);
+            }, [itemsPerPage]);
+
+            // Load initial data
+            useEffect(() => {
+                fetchRecipes(1, itemsPerPage);
+            }, [fetchRecipes]);
+
+            // Handle page change
+            const handlePageChange = (page) => {
+                setCurrentPage(page);
+                fetchRecipes(page, itemsPerPage, isFiltered ? filters : null);
+            };
+
+            // Handle items per page change
+            const handleItemsPerPageChange = (newItemsPerPage) => {
+                setItemsPerPage(newItemsPerPage);
+                setCurrentPage(1);
+                fetchRecipes(1, newItemsPerPage, isFiltered ? filters : null);
+            };
+
+            // Handle search
+            const handleSearch = (searchFilters) => {
+                setCurrentPage(1);
+                fetchRecipes(1, itemsPerPage, searchFilters);
+            };
+
+            // Handle row click
+            const handleRowClick = (recipe) => {
+                setSelectedRecipe(recipe);
+                setIsDrawerOpen(true);
+            };
+
+            // Handle drawer close
+            const handleDrawerClose = () => {
+                setIsDrawerOpen(false);
+                setSelectedRecipe(null);
+            };
+
+            // Format time for display
+            const formatTime = (minutes) => {
+                if (!minutes) return 'N/A';
+                if (minutes < 60) return `${minutes} min`;
+                const hours = Math.floor(minutes / 60);
+                const remainingMinutes = minutes % 60;
+                return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+            };
+
+            const totalPages = Math.ceil(totalItems / itemsPerPage);
+
+            if (error) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                        <div className="text-center">
+                            <i className="fas fa-exclamation-triangle text-6xl text-red-400 mb-4"></i>
+                            <h2 className="text-2xl font-bold text-gray-900 mb-2">Error</h2>
+                            <p className="text-gray-600 mb-4">{error}</p>
+                            <button 
+                                onClick={() => fetchRecipes(currentPage, itemsPerPage, isFiltered ? filters : null)}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                            >
+                                Retry
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+                        {/* Header */}
+                        <div className="mb-6">
+                            <h1 className="text-3xl font-bold text-gray-900">Recipe Collection</h1>
+                            <p className="mt-2 text-gray-600">Discover and explore delicious recipes from around the world</p>
+                        </div>
+
+                        {/* Filters */}
+                        <FilterRow 
+                            filters={filters}
+                            setFilters={setFilters}
+                            onSearch={handleSearch}
+                            isLoading={loading}
+                        />
+
+                        {/* Loading State */}
+                        {loading && (
+                            <div className="text-center py-12">
+                                <div className="loading-spinner mx-auto mb-4" style={{width: '40px', height: '40px'}}></div>
+                                <p className="text-gray-600">Loading recipes...</p>
+                            </div>
+                        )}
+
+                        {/* No Results */}
+                        {!loading && recipes.length === 0 && (
+                            <NoResults type={isFiltered ? 'search' : 'data'} />
+                        )}
+
+                        {/* Recipe Table */}
+                        {!loading && recipes.length > 0 && (
+                            <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+                                <div className="table-container">
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50 sticky top-0 z-10">
+                                            <tr>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                    Title
+                                                </th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                    Cuisine
+                                                </th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                    Rating
+                                                </th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                    Total Time
+                                                </th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                    Serves
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {recipes.map((recipe, index) => (
+                                                <tr 
+                                                    key={recipe.id || index}
+                                                    onClick={() => handleRowClick(recipe)}
+                                                    className="hover:bg-gray-50 cursor-pointer transition-colors"
+                                                >
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <div className="truncate-cell font-medium text-gray-900" title={recipe.title}>
+                                                            {recipe.title || 'Untitled Recipe'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                                                            {recipe.cuisine || 'Unknown'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <StarRating rating={recipe.rating} />
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                                        {formatTime(recipe.total_time)}
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                                        {recipe.serves || 'Not specified'}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* Pagination */}
+                                {totalPages > 1 && (
+                                    <Pagination
+                                        currentPage={currentPage}
+                                        totalPages={totalPages}
+                                        totalItems={totalItems}
+                                        itemsPerPage={itemsPerPage}
+                                        onPageChange={handlePageChange}
+                                        onItemsPerPageChange={handleItemsPerPageChange}
+                                    />
+                                )}
+                            </div>
+                        )}
+
+                        {/* Recipe Drawer */}
+                        <RecipeDrawer 
+                            recipe={selectedRecipe}
+                            isOpen={isDrawerOpen}
+                            onClose={handleDrawerClose}
+                        />
+                    </div>
+                </div>
+            );
+        };
+
+        // Render the app
+        ReactDOM.render(<RecipeTable />, document.getElementById('root'));
+    </script>
+</body>
+</html>

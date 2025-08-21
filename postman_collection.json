@@ -1,0 +1,471 @@
+{
+  "info": {
+    "name": "Recipe API Tests",
+    "description": "Complete test collection for Recipe Data Collection API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "recipe-api-tests"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3001",
+      "type": "string"
+    },
+    {
+      "key": "api_url",
+      "value": "{{base_url}}/api",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": ["{{base_url}}"],
+          "path": ["health"]
+        },
+        "description": "Check if the server is running and healthy"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response has status field', function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('status');",
+              "    pm.expect(jsonData.status).to.eql('OK');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get All Recipes - Basic",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{api_url}}/recipes?page=1&limit=10",
+          "host": ["{{api_url}}"],
+          "path": ["recipes"],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "description": "Get paginated recipes sorted by rating"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response has correct structure', function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('page');",
+              "    pm.expect(jsonData).to.have.property('limit');",
+              "    pm.expect(jsonData).to.have.property('total');",
+              "    pm.expect(jsonData).to.have.property('data');",
+              "    pm.expect(jsonData.data).to.be.an('array');",
+              "});",
+              "",
+              "pm.test('Pagination parameters are correct', function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.page).to.eql(1);",
+              "    pm.expect(jsonData.limit).to.eql(10);",
+              "});",
+              "",
+              "pm.test('Recipes are sorted by rating (descending)', function () {",
+              "    const jsonData = pm.response.json();",
+              "    const recipes = jsonData.data;",
+              "    ",
+              "    for (let i = 0; i < recipes.length - 1; i++) {",
+              "        const currentRating = recipes[i].rating || 0;",
+              "        const nextRating = recipes[i + 1].rating || 0;",
+              "        pm.expect(currentRating).to.be.at.least(nextRating);",
+              "    }",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get All Recipes - Different Page Size",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{api_url}}/recipes?page=1&limit=25",
+          "host": ["{{api_url}}"],
+          "path": ["recipes"],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "25"
+            }
+          ]
+        },
+        "description": "Test different page sizes"
+      }
+    },
+    {
+      "name": "Search by Title",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{api_url}}/recipes/search?title=pie",
+          "host": ["{{api_url}}"],
+          "path": ["recipes", "search"],
+          "query": [
+            {
+              "key": "title",
+              "value": "pie"
+            }
+          ]
+        },
+        "description": "Search recipes by title containing 'pie'"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('All results contain pie in title', function () {",
+              "    const jsonData = pm.response.json();",
+              "    const recipes = jsonData.data;",
+              "    ",
+              "    recipes.forEach(function(recipe) {",
+              "        pm.expect(recipe.title.toLowerCase()).to.include('pie');",
+              "    });",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Search by Rating (Greater Than)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{api_url}}/recipes/search?rating=>=4.5",
+          "host": ["{{api_url}}"],
+          "path": ["recipes", "search"],
+          "query": [
+            {
+              "key": "rating",
+              "value": ">=4.5"
+            }
+          ]
+        },
+        "description": "Search recipes with rating >= 4.5"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('All results have rating >= 4.5', function () {",
+              "    const jsonData = pm.response.json();",
+              "    const recipes = jsonData.data;",
+              "    ",
+              "    recipes.forEach(function(recipe) {",
+              "        if (recipe.rating !== null) {",
+              "            pm.expect(recipe.rating).to.be.at.least(4.5);",
+              "        }",
+              "    });",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Search by Calories",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{api_url}}/recipes/search?calories=<=400",
+          "host": ["{{api_url}}"],
+          "path": ["recipes", "search"],
+          "query": [
+            {
+              "key": "calories",
+              "value": "<=400"
+            }
+          ]
+        },
+        "description": "Search recipes with calories <= 400"
+      }
+    },
+    {
+      "name": "Search by Total Time",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{api_url}}/recipes/search?total_time=<=60",
+          "host": ["{{api_url}}"],
+          "path": ["recipes", "search"],
+          "query": [
+            {
+              "key": "total_time",
+              "value": "<=60"
+            }
+          ]
+        },
+        "description": "Search recipes with total time <= 60 minutes"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('All results have total_time <= 60', function () {",
+              "    const jsonData = pm.response.json();",
+              "    const recipes = jsonData.data;",
+              "    ",
+              "    recipes.forEach(function(recipe) {",
+              "        if (recipe.total_time !== null) {",
+              "            pm.expect(recipe.total_time).to.be.at.most(60);",
+              "        }",
+              "    });",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Search by Cuisine",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{api_url}}/recipes/search?cuisine=Southern",
+          "host": ["{{api_url}}"],
+          "path": ["recipes", "search"],
+          "query": [
+            {
+              "key": "cuisine",
+              "value": "Southern"
+            }
+          ]
+        },
+        "description": "Search recipes from Southern cuisine"
+      }
+    },
+    {
+      "name": "Complex Search",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{api_url}}/recipes/search?title=chicken&rating=>=4.0&total_time=<=120&page=1&limit=10",
+          "host": ["{{api_url}}"],
+          "path": ["recipes", "search"],
+          "query": [
+            {
+              "key": "title",
+              "value": "chicken"
+            },
+            {
+              "key": "rating",
+              "value": ">=4.0"
+            },
+            {
+              "key": "total_time",
+              "value": "<=120"
+            },
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "description": "Complex search with multiple filters and pagination"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Results match all criteria', function () {",
+              "    const jsonData = pm.response.json();",
+              "    const recipes = jsonData.data;",
+              "    ",
+              "    recipes.forEach(function(recipe) {",
+              "        pm.expect(recipe.title.toLowerCase()).to.include('chicken');",
+              "        if (recipe.rating !== null) {",
+              "            pm.expect(recipe.rating).to.be.at.least(4.0);",
+              "        }",
+              "        if (recipe.total_time !== null) {",
+              "            pm.expect(recipe.total_time).to.be.at.most(120);",
+              "        }",
+              "    });",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Search with No Results",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{api_url}}/recipes/search?title=nonexistentrecipe12345",
+          "host": ["{{api_url}}"],
+          "path": ["recipes", "search"],
+          "query": [
+            {
+              "key": "title",
+              "value": "nonexistentrecipe12345"
+            }
+          ]
+        },
+        "description": "Test search that should return no results"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Returns empty array for no matches', function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.data).to.be.an('array');",
+              "    pm.expect(jsonData.data).to.have.lengthOf(0);",
+              "    pm.expect(jsonData.total).to.eql(0);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invalid Page Parameter",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{api_url}}/recipes?page=-1&limit=10",
+          "host": ["{{api_url}}"],
+          "path": ["recipes"],
+          "query": [
+            {
+              "key": "page",
+              "value": "-1"
+            },
+            {
+              "key": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "description": "Test with invalid page parameter"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200 (handles invalid page gracefully)', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Page parameter defaults to 1', function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.page).to.eql(1);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Large Page Size Limit",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{api_url}}/recipes?page=1&limit=100",
+          "host": ["{{api_url}}"],
+          "path": ["recipes"],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "100"
+            }
+          ]
+        },
+        "description": "Test with large limit to verify it's capped at 50"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {

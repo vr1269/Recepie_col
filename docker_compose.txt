@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: recipe_postgres
+    environment:
+      POSTGRES_DB: recipes_db
+      POSTGRES_USER: recipe_user
+      POSTGRES_PASSWORD: recipe_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/setup_database.sql:/docker-entrypoint-initdb.d/setup.sql
+    networks:
+      - recipe_network
+
+  # Recipe API Backend
+  recipe-api:
+    build: ./backend
+    container_name: recipe_api
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: recipes_db
+      DB_USER: recipe_user
+      DB_PASSWORD: recipe_password
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    depends_on:
+      - postgres
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - recipe_network
+    restart: unless-stopped
+
+  # Nginx for Frontend (Optional)
+  nginx:
+    image: nginx:alpine
+    container_name: recipe_frontend
+    ports:
+      - "3000:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html
+    networks:
+      - recipe_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  recipe_network:
+    driver: bridge
